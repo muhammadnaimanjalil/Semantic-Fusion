@@ -139,9 +139,7 @@ embedding generation, the two feature blocks are concatenated into a single
 model input:
 
 ```math
-X_{\text{multimodal}}
-=
-[X_{\text{tabular}}, X_{\text{text}}]
+X_{\text{multimodal}} = [X_{\text{tabular}}, X_{\text{text}}]
 ```
 
 This design allows a prediction model to learn jointly from structured
