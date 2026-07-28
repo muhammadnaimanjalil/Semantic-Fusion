@@ -81,6 +81,7 @@ def test_classification_group_split_has_no_group_overlap():
         group_column="paper_id",
         pca_mode="fixed",
         pca_components=3,
+        run_tabular_baseline=True,
     )
     result = run_experiment(frame, config, FakeEmbedder())
     train_groups = set(
@@ -92,6 +93,13 @@ def test_classification_group_split_has_no_group_overlap():
     assert result.diagnostics["embedding_dimensions_original"] == 6
     assert result.diagnostics["embedding_dimensions_used"] == 3
     assert result.metrics.loc[0, "accuracy"] >= 0.5
+    assert set(result.metrics["analysis"]) == {
+        "Multimodal",
+        "Tabular baseline",
+    }
+    assert len(result.predictions) == 2 * result.diagnostics["test_rows"]
+    assert result.diagnostics["baseline_analysis_included"] is True
+    assert result.diagnostics["baseline_model_features"] == 4
     assert set(result.predictions["actual"]) == {"accept", "reject"}
 
 
