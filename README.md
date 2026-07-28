@@ -12,39 +12,39 @@ variables and unstructured text.
 
 ## Analytical objective
 
-For each observation \(i\), the uploaded dataset may contain:
+For each observation $i$, the uploaded dataset may contain:
 
-- a dependent variable \(y_i\);
-- structured tabular predictors \(x_i\); and
-- one or more text fields \(t_i\).
+- a dependent variable $y_i$;
+- structured tabular predictors $x_i$; and
+- one or more text fields $t_i$.
 
 A sentence transformer converts the text into a dense semantic representation:
 
-$$
+```math
 z_i = f_{\theta}(t_i)
-$$
+```
 
-where \(f_{\theta}\) is a pretrained sentence-transformer model and \(z_i\) is
+where $f_{\theta}$ is a pretrained sentence-transformer model and $z_i$ is
 the resulting embedding vector.
 
 After optional dimensionality reduction, the semantic features are concatenated
 with the processed tabular features:
 
-$$
+```math
 h_i = [g(x_i), \tilde{z}_i]
-$$
+```
 
-where \(g(x_i)\) represents the encoded and scaled tabular predictors and
-\(\tilde{z}_i\) represents either the original or PCA-reduced text embedding.
+where $g(x_i)$ represents the encoded and scaled tabular predictors and
+$\tilde{z}_i$ represents either the original or PCA-reduced text embedding.
 
 A supervised prediction model then estimates:
 
-$$
+```math
 \hat{y}_i = m(h_i)
-$$
+```
 
-For classification, \(\hat{y}_i\) is a predicted class or class probability.
-For regression, \(\hat{y}_i\) is a predicted continuous value.
+For classification, $\hat{y}_i$ is a predicted class or class probability.
+For regression, $\hat{y}_i$ is a predicted continuous value.
 
 ## Prediction and forecasting framework
 
@@ -138,11 +138,11 @@ The application uses feature-level fusion. After tabular preprocessing and text
 embedding generation, the two feature blocks are concatenated into a single
 model input:
 
-$$
+```math
 X_{\text{multimodal}}
 =
 [X_{\text{tabular}}, X_{\text{text}}]
-$$
+```
 
 This design allows a prediction model to learn jointly from structured
 attributes and semantic information contained in text.
@@ -168,9 +168,9 @@ For every selected prediction model, the baseline uses the same:
 The only difference is that the text columns and sentence-transformer
 embeddings are excluded:
 
-$$
+```math
 X_{\text{baseline}} = X_{\text{tabular}}
-$$
+```
 
 Comparing the multimodal and baseline results provides a direct assessment of
 the incremental predictive value contributed by the semantic text features.
@@ -238,7 +238,7 @@ Classification results include:
 
 Regression results include:
 
-- coefficient of determination (\(R^2\));
+- coefficient of determination ($R^2$);
 - root mean squared error (RMSE); and
 - mean absolute error (MAE).
 
