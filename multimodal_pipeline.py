@@ -73,6 +73,7 @@ class ExperimentConfig:
     pca_mode: PcaMode = "none"
     pca_components: int | float | None = None
     retain_embeddings: bool = False
+    run_tabular_baseline: bool = False
     model_parameters: dict[str, dict[str, int | float]] = field(
         default_factory=dict
     )
@@ -598,99 +599,137 @@ def run_experiment(
     confusion_frames: dict[str, pd.DataFrame] = {}
     warnings: list[str] = []
 
-    for model_name in config.model_names:
-        estimator = _build_estimator(
-            model_name,
-            config.task,
-            config.random_state,
-            config.model_parameters.get(model_name),
-        )
-        estimator.fit(x_train, y_train)
-        predicted = np.asarray(estimator.predict(x_test)).reshape(-1)
+    feature_sets = [("Multimodal", x_train, x_test)]
+    if config.run_tabular_baseline:
+        if train_tabular.shape[1] == 0:
+            raise ValueError(
+                "The tabular baseline requires at least one usable tabular feature."
+            )
+        feature_sets.append(("Tabular baseline", train_tabular, test_tabular))
 
-        if config.task == "classification":
-            metric_rows.append(
-                {
-                    "model": model_name,
-                    "accuracy": accuracy_score(y_test, predicted),
-                    "f1_weighted": f1_score(
-                        y_test, predicted, average="weighted", zero_division=0
-                    ),
-                    "f1_macro": f1_score(
-                        y_test, predicted, average="macro", zero_division=0
-                    ),
-                    "precision_weighted": precision_score(
-                        y_test, predicted, average="weighted", zero_division=0
-                    ),
-                    "recall_weighted": recall_score(
-                        y_test, predicted, average="weighted", zero_division=0
-                    ),
-                }
+    for analysis_type, train_features, test_features in feature_sets:
+        for model_name in config.model_names:
+            estimator = _build_estimator(
+                model_name,
+                config.task,
+                config.random_state,
+                config.model_parameters.get(model_name),
             )
-            actual_labels = label_encoder.inverse_transform(y_test)
-            predicted_labels = label_encoder.inverse_transform(
-                np.asarray(predicted, dtype=int)
-            )
-            if len(label_encoder.classes_) <= MAX_CONFUSION_MATRIX_CLASSES:
-                matrix = confusion_matrix(
-                    actual_labels,
-                    predicted_labels,
-                    labels=label_encoder.classes_,
+            estimator.fit(train_features, y_train)
+            predicted = np.asarray(
+                estimator.predict(test_features)
+            ).reshape(-1)
+
+            if config.task == "classification":
+                metric_rows.append(
+                    {
+                        "analysis": analysis_type,
+                        "model": model_name,
+                        "accuracy": accuracy_score(y_test, predicted),
+                        "f1_weighted": f1_score(
+                            y_test,
+                            predicted,
+                            average="weighted",
+                            zero_division=0,
+                        ),
+                        "f1_macro": f1_score(
+                            y_test,
+                            predicted,
+                            average="macro",
+                            zero_division=0,
+                        ),
+                        "precision_weighted": precision_score(
+                            y_test,
+                            predicted,
+                            average="weighted",
+                            zero_division=0,
+                        ),
+                        "recall_weighted": recall_score(
+                            y_test,
+                            predicted,
+                            average="weighted",
+                            zero_division=0,
+                        ),
+                    }
                 )
-                confusion_frames[model_name] = pd.DataFrame(
-                    matrix,
-                    index=[f"actual: {label}" for label in label_encoder.classes_],
-                    columns=[f"predicted: {label}" for label in label_encoder.classes_],
+                actual_labels = label_encoder.inverse_transform(y_test)
+                predicted_labels = label_encoder.inverse_transform(
+                    np.asarray(predicted, dtype=int)
                 )
-            elif not warnings:
-                warnings.append(
-                    "Confusion matrices were omitted because the target has more "
-                    f"than {MAX_CONFUSION_MATRIX_CLASSES} classes."
+                if len(label_encoder.classes_) <= MAX_CONFUSION_MATRIX_CLASSES:
+                    matrix = confusion_matrix(
+                        actual_labels,
+                        predicted_labels,
+                        labels=label_encoder.classes_,
+                    )
+                    matrix_name = f"{analysis_type} · {model_name}"
+                    confusion_frames[matrix_name] = pd.DataFrame(
+                        matrix,
+                        index=[
+                            f"actual: {label}"
+                            for label in label_encoder.classes_
+                        ],
+                        columns=[
+                            f"predicted: {label}"
+                            for label in label_encoder.classes_
+                        ],
+                    )
+                elif not warnings:
+                    warnings.append(
+                        "Confusion matrices were omitted because the target has "
+                        "more "
+                        f"than {MAX_CONFUSION_MATRIX_CLASSES} classes."
+                    )
+                prediction_frame = pd.DataFrame(
+                    {
+                        "source_row_index": original_indices[test_pos],
+                        "analysis": analysis_type,
+                        "model": model_name,
+                        "actual": actual_labels,
+                        "predicted": predicted_labels,
+                    }
                 )
-            prediction_frame = pd.DataFrame(
-                {
-                    "source_row_index": original_indices[test_pos],
-                    "model": model_name,
-                    "actual": actual_labels,
-                    "predicted": predicted_labels,
-                }
-            )
-            if (
-                hasattr(estimator, "predict_proba")
-                and len(label_encoder.classes_) <= MAX_PROBABILITY_CLASSES
-            ):
-                probabilities = estimator.predict_proba(x_test)
-                for class_index, class_label in enumerate(label_encoder.classes_):
-                    prediction_frame[f"probability_{class_label}"] = probabilities[
-                        :, class_index
-                    ]
-            elif hasattr(estimator, "predict_proba") and not any(
-                "Probability columns" in item for item in warnings
-            ):
-                warnings.append(
-                    "Probability columns were omitted because the target has more "
-                    f"than {MAX_PROBABILITY_CLASSES} classes."
+                if (
+                    hasattr(estimator, "predict_proba")
+                    and len(label_encoder.classes_) <= MAX_PROBABILITY_CLASSES
+                ):
+                    probabilities = estimator.predict_proba(test_features)
+                    for class_index, class_label in enumerate(
+                        label_encoder.classes_
+                    ):
+                        prediction_frame[
+                            f"probability_{class_label}"
+                        ] = probabilities[:, class_index]
+                elif hasattr(estimator, "predict_proba") and not any(
+                    "Probability columns" in item for item in warnings
+                ):
+                    warnings.append(
+                        "Probability columns were omitted because the target has "
+                        "more "
+                        f"than {MAX_PROBABILITY_CLASSES} classes."
+                    )
+            else:
+                rmse = float(np.sqrt(mean_squared_error(y_test, predicted)))
+                metric_rows.append(
+                    {
+                        "analysis": analysis_type,
+                        "model": model_name,
+                        "r2": r2_score(y_test, predicted),
+                        "rmse": rmse,
+                        "mae": mean_absolute_error(y_test, predicted),
+                    }
                 )
-        else:
-            rmse = float(np.sqrt(mean_squared_error(y_test, predicted)))
-            metric_rows.append(
-                {
-                    "model": model_name,
-                    "r2": r2_score(y_test, predicted),
-                    "rmse": rmse,
-                    "mae": mean_absolute_error(y_test, predicted),
-                }
-            )
-            prediction_frame = pd.DataFrame(
-                {
-                    "source_row_index": original_indices[test_pos],
-                    "model": model_name,
-                    "actual": y_test,
-                    "predicted": predicted,
-                    "residual": y_test - predicted,
-                }
-            )
-        prediction_frames.append(prediction_frame)
+                prediction_frame = pd.DataFrame(
+                    {
+                        "source_row_index": original_indices[test_pos],
+                        "analysis": analysis_type,
+                        "model": model_name,
+                        "actual": y_test,
+                        "predicted": predicted,
+                        "residual": y_test - predicted,
+                    }
+                )
+            prediction_frames.append(prediction_frame)
 
     pca_components = (
         int(reducer.n_components_) if reducer is not None else embeddings.shape[1]
@@ -720,6 +759,10 @@ def run_experiment(
         "pca_explained_variance": explained_variance,
         "tabular_dimensions_after_encoding": int(train_tabular.shape[1]),
         "total_model_features": int(x_train.shape[1]),
+        "baseline_model_features": (
+            int(train_tabular.shape[1]) if config.run_tabular_baseline else None
+        ),
+        "baseline_analysis_included": config.run_tabular_baseline,
         "feature_matrix_format": "sparse CSR" if sparse.issparse(x_train) else "dense",
         "training_feature_memory_mb": _matrix_nbytes(x_train) / (1024**2),
         "dataset_fingerprint_sha256": _dataset_fingerprint(

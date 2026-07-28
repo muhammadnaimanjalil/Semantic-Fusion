@@ -547,7 +547,11 @@ def _build_download_bundle(result) -> bytes:
             json.dumps(result.diagnostics, indent=2, default=str),
         )
         for model_name, matrix in result.confusion_matrices.items():
-            safe_name = model_name.lower().replace(" ", "_")
+            safe_name = (
+                model_name.lower()
+                .replace(" · ", "__")
+                .replace(" ", "_")
+            )
             archive.writestr(
                 f"confusion_matrix_{safe_name}.csv",
                 _safe_csv(matrix, include_index=True),
@@ -602,6 +606,13 @@ def _render_results(result) -> None:
     )
     for warning in diagnostics.get("warnings", []):
         st.warning(warning)
+
+    if diagnostics.get("baseline_analysis_included"):
+        st.info(
+            "The tabular baseline uses the same analyzed rows, split, target, "
+            "tabular predictors, models, hyperparameters, and evaluation metrics "
+            "as the multimodal analysis, but excludes all text embeddings."
+        )
 
     st.dataframe(
         result.metrics.style.format(precision=4),
@@ -973,6 +984,19 @@ def main() -> None:
                 "PCA and tabular preprocessing are fitted on training data only."
             )
 
+        st.markdown("##### Baseline comparison")
+        run_tabular_baseline = st.checkbox(
+            "Also run a tabular-only baseline analysis",
+            value=False,
+            help=(
+                "Train each selected prediction model again using the same target, "
+                "tabular predictors, rows, split, random seed, hyperparameters, and "
+                "metrics, but exclude the text columns and sentence-transformer "
+                "embeddings. This provides a direct comparison of whether semantic "
+                "text features improve predictive performance."
+            ),
+        )
+
         submitted = st.button(
             "Run multimodal analysis",
             type="primary",
@@ -1022,6 +1046,7 @@ def main() -> None:
             pca_mode=pca_mode,
             pca_components=pca_components,
             retain_embeddings=bool(retain_embeddings),
+            run_tabular_baseline=bool(run_tabular_baseline),
             model_parameters=model_parameters,
         )
         analysis_signature = hashlib.sha256(
