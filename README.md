@@ -82,7 +82,7 @@ The user can:
 - select a supported sentence-transformer model;
 - provide a compatible custom model identifier;
 - control the embedding batch size;
-- optionally L2-normalize the embeddings; and
+- optionally $L_2$-normalize the embeddings; and
 - optionally retain the generated embeddings in the downloadable results.
 
 When several text columns are selected, their values are combined while
@@ -230,8 +230,8 @@ caused by the same entity appearing on both sides of the evaluation.
 Classification results include:
 
 - accuracy;
-- weighted F1 score;
-- macro F1 score;
+- weighted $F_1$ score;
+- macro $F_1$ score;
 - weighted precision;
 - weighted recall; and
 - confusion matrices where the number of classes is manageable.
